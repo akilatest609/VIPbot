@@ -2,6 +2,8 @@
 from dotenv import load_dotenv
 load_dotenv()  # Loads variables from your local .env file
 
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault, Update
 from telegram.ext import (
     Application,
@@ -33,6 +35,21 @@ from batch_handlers import (
 )
 from chat_handlers import handle_incoming_message, on_message_reaction
 
+# --- Micro Web Server for Render Keep-Alive / Uptime Monitoring ---
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is active and running!")
+    def log_message(self, format, *args):
+        return  # Suppress access logs to keep console clean
+
+def run_web_server():
+    server = HTTPServer(("0.0.0.0", 8080), SimpleHandler)
+    log.info("Keep-alive web server started on port 8080")
+    server.serve_forever()
+# ------------------------------------------------------------------
+
 async def post_init(app: Application):
     # Hide the command menu globally for regular users
     await app.bot.set_my_commands([], scope=BotCommandScopeDefault())
@@ -58,6 +75,9 @@ def main():
         return
 
     init_db()
+    
+    # Start the lightweight keep-alive web server in a background thread
+    threading.Thread(target=run_web_server, daemon=True).start()
     
     # Build application with custom network timeouts for large video transfers
     app = (
